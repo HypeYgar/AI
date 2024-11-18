@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ai</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #1e1e2f;
+            color: #fff;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+        }
+
+        .chat-container {
+            width: 100%;
+            height: 100vh;
+            background-color: #292942;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #393965;
+            border-bottom: 1px solid #444;
+            font-size: 18px;
+        }
+
+        .clear-btn {
+            background: none;
+            border: 1px solid #fff;
+            border-radius: 8px;
+            padding: 5px 10px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .clear-btn:hover {
+            background-color: #ff5c5c;
+            border-color: #ff5c5c;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background-color: #2a2a3f;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .messages::-webkit-scrollbar {
+            display: none;
+        }
+
+        .messages {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .message {
+            max-width: 75%;
+            word-wrap: break-word;
+            padding: 10px 15px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background-color: #4e88ff;
+            color: white;
+            text-align: right;
+        }
+
+        .message.bot {
+            align-self: flex-start;
+            background-color: #44476a;
+            color: white;
+            text-align: left;
+        }
+
+        .input-container {
+            position: sticky;
+            bottom: 0;
+            display: flex;
+            gap: 10px;
+            padding: 15px;
+            background-color: #393965;
+            border-top: 1px solid #444;
+        }
+
+        .input-container input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .input-container input:focus {
+            outline: 2px solid #4e88ff;
+        }
+
+        .input-container button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background-color: #4e88ff;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .input-container button:hover {
+            background-color: #3a6fdd;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="header">
+            AI
+            <button class="clear-btn" id="clearChat">Очистить чат</button>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="input-container">
+            <input type="text" id="userInput" placeholder="сообщение..." />
+            <button id="sendButton">=></button>
+        </div>
+    </div>
+
+
+    <script>
+        const API_URL = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-32B-Instruct/v1/chat/completions";
+        const API_TOKEN = "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";
+        const messagesContainer = document.getElementById("messages");
+        const userInput = document.getElementById("userInput");
+        const sendButton = document.getElementById("sendButton");
+        const clearChatButton = document.getElementById("clearChat");
+
+        function loadChatHistory() {
+            const chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
+            chatHistory.forEach(({ content, sender }) => addMessage(content, sender));
+        }
+
+        function saveChatHistory() {
+            const messages = Array.from(document.querySelectorAll(".message"));
+            const chatHistory = messages.map(message => ({
+                content: message.textContent,
+                sender: message.classList.contains("user") ? "user" : "bot"
+            }));
+            localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+        }
+
+        function clearChat() {
+            messagesContainer.innerHTML = "";
+            localStorage.removeItem("chatHistory");
+        }
+
+        async function sendMessage() {
+            const userMessage = userInput.value.trim();
+            if (!userMessage) return;
+
+            addMessage(userMessage, "user");
+            userInput.value = "";
+            saveChatHistory();
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${API_TOKEN}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: "Qwen/Qwen2.5-Coder-32B-Instruct",
+                        messages: [
+                            {
+                                role: "user",
+                                content: userMessage
+                            }
+                        ],
+                        max_tokens: 500,
+                        stream: false
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error("Failed to fetch response from the API.");
+                }
+                const data = await response.json();
+                const botMessage = data.choices?.[0]?.message?.content || "Sorry, I didn't understand that.";
+                addMessage(botMessage, "bot");
+                saveChatHistory();
+            } catch (error) {
+                console.error("Error:", error);
+                addMessage("Error: Unable to connect to the chatbot.", "bot");
+                saveChatHistory();
+            }
+        }
+
+        function addMessage(content, sender) {
+            const messageDiv = document.createElement("div");
+            messageDiv.classList.add("message", sender);
+            messageDiv.textContent = content;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        sendButton.addEventListener("click", sendMessage);
+        userInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") {
+                sendMessage();
+            }
+        });
+        clearChatButton.addEventListener("click", clearChat);
+
+        window.onload = loadChatHistory;
+    </script>
+</body>
+</html>
